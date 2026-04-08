@@ -1,0 +1,318 @@
+
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[slantedGreek]{mathpazo}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{float}
+\setlength{\emergencystretch}{2em}
+
+\title{Tutorial: Generative Bayesian Hyperparameter Tuning\\for the Student-$t$ Distribution}
+\author{Companion to ``Generative Bayesian Hyperparameter Tuning''\\by Lopes, Polson, and Sokolov}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent This tutorial walks through the generative Bayesian hyperparameter tuning method step by step, using the Student-$t$ distribution as a concrete example.  We show every computational detail: the model and its likelihood, the weighted Bayesian bootstrap (WBB) construction, the generator training via supervised regression, the outer tuning criterion for selecting the degrees-of-freedom parameter~$\nu$, and the uncertainty quantification via bootstrap resampling.
+\end{abstract}
+
+\tableofcontents
+
+%% ================================================================
+\section{The problem}
+%% ================================================================
+
+Suppose we observe $n$ real-valued observations $y_1,\ldots,y_n$ and believe they come from a location-scale Student-$t$ distribution:
+\[
+y_i \;\sim\; t_\nu(\mu,\sigma^2), \qquad i=1,\ldots,n.
+\]
+The density is
+\[
+p(y_i \mid \mu,\sigma,\nu) \;=\; \frac{\Gamma\!\bigl(\frac{\nu+1}{2}\bigr)}{\Gamma\!\bigl(\frac{\nu}{2}\bigr)\,\sqrt{\nu\pi}\,\sigma}\;\left(1+\frac{(y_i-\mu)^2}{\nu\sigma^2}\right)^{-(\nu+1)/2}.
+\]
+
+\textbf{Parameters:}  $\theta = (\mu,\sigma)$ are the location and scale (model parameters).
+
+\textbf{Hyper-parameter:}  $\nu > 0$ is the degrees-of-freedom (the hyper-parameter we want to tune).
+
+\textbf{Why is $\nu$ hard to estimate?}  The profile likelihood in $\nu$ is flat for large~$\nu$ (the $t$-distribution approaches a Gaussian), may be strictly increasing as $\nu\to\infty$ so that the MLE does not exist, and improper Bayesian priors on $\nu$ can produce improper posteriors (Fonseca, Ferreira \& Migon, 2008).
+
+\textbf{Our goal:}  Use the WBB~+~generator method to (1)~select $\hat\nu$ and (2)~quantify uncertainty in $(\hat\mu,\hat\sigma)$ at the selected~$\hat\nu$.
+
+%% ================================================================
+\section{The three-component template}
+%% ================================================================
+
+The method has three components.  We describe each in general and then specialize it to the $t$-distribution.
+
+\subsection{Component 1: Inner problem (weighted optimization)}
+
+\textbf{General form.}  Given hyper-parameter $h$, random weights $\omega\sim\pi(\omega)$, and per-observation loss $\ell$:
+\begin{equation}
+\label{eq:inner}
+L(\theta;\omega,h) \;=\; \frac{1}{n}\sum_{i=1}^n \omega_i\,\ell(y_i\mid\theta,h) \;+\; \lambda\,\phi(\theta), \qquad \hat\theta(\omega,h) \;\in\; \arg\min_\theta\; L(\theta;\omega,h).
+\end{equation}
+
+\textbf{For the $t$-distribution.}  We have $h = \nu$ (no regularization, so $\lambda=0$), $\theta = (\mu,\sigma)$, and the per-observation negative log-likelihood:
+\[
+\ell(y_i\mid\mu,\sigma,\nu) \;=\; -\log\Gamma\!\Bigl(\tfrac{\nu+1}{2}\Bigr) + \log\Gamma\!\Bigl(\tfrac{\nu}{2}\Bigr) + \tfrac{1}{2}\log(\nu\pi\sigma^2) + \tfrac{\nu+1}{2}\log\!\Bigl(1+\frac{(y_i-\mu)^2}{\nu\sigma^2}\Bigr).
+\]
+The inner problem becomes: for fixed $\nu$ and weights $\omega$,
+\begin{equation}
+\label{eq:inner-t}
+\hat\theta(\omega,\nu) \;=\; \arg\min_{(\mu,\sigma)}\; \frac{1}{n}\sum_{i=1}^n \omega_i\,\ell(y_i\mid\mu,\sigma,\nu).
+\end{equation}
+This is solved by numerical optimization (e.g., BFGS), optimizing over $(\mu,\log\sigma)$ to enforce $\sigma>0$.
+
+\subsection{Component 2: Transport-map generator}
+
+\textbf{General form.}  A parametric map $g_\varphi(\omega,h) \approx \hat\theta(\omega,h)$ that avoids re-solving the inner optimization for each new $(\omega,h)$.
+
+\textbf{For the $t$-distribution.}  We use block bootstrap weights.  Partition the $n$ training observations into $K$ blocks (we use $K=16$).  A draw from the weight distribution is:
+\begin{enumerate}
+\item Draw $\alpha = (\alpha_1,\ldots,\alpha_K) \sim K \cdot \mathrm{Dirichlet}(\mathbf{1}_K)$, so $\sum_k \alpha_k = K$ and $E[\alpha_k]=1$.
+\item Assign $\omega_i = \alpha_k$ for all $i$ in block~$k$.
+\end{enumerate}
+This gives a vector $\omega\in\mathbb{R}^n_+$ that is constant within blocks, parameterized by the $K$-dimensional vector $\alpha$.
+
+The generator is a \textbf{linear map}.  Define the feature vector
+\[
+z(\alpha,\nu) \;=\; \bigl(1,\;\nu,\;\nu^2,\;\alpha_1,\ldots,\alpha_K\bigr)^\top \;\in\;\mathbb{R}^{K+3}.
+\]
+The generator is
+\[
+g_\varphi(\alpha,\nu) \;=\; A^\top z(\alpha,\nu) \;\in\;\mathbb{R}^2,
+\]
+where $A\in\mathbb{R}^{(K+3)\times 2}$ is a matrix of parameters (the ``$\varphi$'' of the general framework).  The two outputs are $(\hat\mu, \hat\sigma)$.
+
+\subsection{Component 3: Outer tuning criterion}
+
+\textbf{General form.}  Choose $h$ to minimize a validation criterion:
+\begin{equation}
+\label{eq:outer}
+\hat h \;=\; \arg\min_h\; \mathcal{C}\!\bigl(g_{\hat\varphi}(\mathbf{1},h),\;h\bigr),
+\end{equation}
+where we use unit weights $\omega\equiv\mathbf{1}$ (the point-estimate simplification) and $\mathcal{C}$ is the validation negative log-likelihood.
+
+\textbf{For the $t$-distribution.}  Set $\alpha = \mathbf{1}_K$ (all blocks weighted equally) and evaluate
+\begin{equation}
+\label{eq:outer-t}
+\hat\nu \;=\; \arg\min_{\nu\in\mathcal{G}}\; \sum_{i\in\mathcal{D}_{\mathrm{val}}} \ell\!\bigl(y_i \mid g_{\hat\varphi}(\mathbf{1}_K,\nu),\;\nu\bigr),
+\end{equation}
+where $\mathcal{G} = \{1.5, 2.0, 2.5, \ldots, 15.0\}$ is a grid of candidate values, and $g_{\hat\varphi}(\mathbf{1}_K,\nu)$ returns $(\hat\mu,\hat\sigma)$ for each $\nu$.
+
+%% ================================================================
+\section{Step-by-step computation}
+%% ================================================================
+
+\subsection{Step 0: Generate data}
+
+Fix the true parameters and draw a dataset:
+\begin{align*}
+&\nu_{\mathrm{true}} = 4, \quad \mu_{\mathrm{true}} = 2, \quad \sigma_{\mathrm{true}} = 1.5,\\
+&y_i = \mu_{\mathrm{true}} + \sigma_{\mathrm{true}} \cdot t_i, \quad t_i \stackrel{\mathrm{iid}}{\sim} t_4, \quad i=1,\ldots,500.
+\end{align*}
+Split into training ($n_{\mathrm{train}}=350$) and validation ($n_{\mathrm{val}}=150$).
+
+\subsection{Step 1: Assign observations to blocks}
+
+Randomly assign each training observation to one of $K=16$ blocks:
+\[
+\text{block}(i) \;\in\; \{1,2,\ldots,16\}, \quad i = 1,\ldots,350.
+\]
+Each block has approximately $350/16 \approx 22$ observations.  This assignment is \emph{fixed} once and reused for all subsequent weight draws.
+
+\subsection{Step 2: Generate training data for the generator}
+
+For $b = 1,\ldots,B$ (we use $B=200$):
+\begin{enumerate}
+\item \textbf{Sample weights:}  Draw $\alpha^{(b)} \sim 16 \cdot \mathrm{Dirichlet}(\mathbf{1}_{16})$.\\
+Concretely: draw $g_k \stackrel{\mathrm{iid}}{\sim} \mathrm{Gamma}(1,1)$ for $k=1,\ldots,16$, then set $\alpha_k^{(b)} = 16 \cdot g_k / \sum_{k'} g_{k'}$.\\
+Expand to per-observation weights: $\omega_i^{(b)} = \alpha_{\mathrm{block}(i)}^{(b)}$.
+
+\item \textbf{Sample hyper-parameter:}  Draw $\nu^{(b)}$ uniformly from the grid $\mathcal{G}$.
+
+\item \textbf{Solve the inner problem:}  Compute $\hat\theta^{(b)} = (\hat\mu^{(b)}, \hat\sigma^{(b)})$ by minimizing
+\[
+\frac{1}{350}\sum_{i=1}^{350} \omega_i^{(b)}\,\ell\!\bigl(y_i \mid \mu,\sigma,\nu^{(b)}\bigr)
+\]
+over $(\mu,\sigma)$ using BFGS (optimizing over $(\mu,\log\sigma)$).
+\end{enumerate}
+
+This produces a training set of $B=200$ input--output pairs:
+\[
+\Bigl\{\bigl(\alpha^{(b)},\;\nu^{(b)}\bigr) \;\to\; \bigl(\hat\mu^{(b)},\;\hat\sigma^{(b)}\bigr)\Bigr\}_{b=1}^{B}.
+\]
+
+\subsection{Step 3: Train the generator (supervised regression)}
+
+Form the feature matrix and target matrix:
+\[
+Z = \begin{pmatrix} z(\alpha^{(1)},\nu^{(1)})^\top \\ \vdots \\ z(\alpha^{(B)},\nu^{(B)})^\top \end{pmatrix} \in \mathbb{R}^{B\times(K+3)}, \qquad
+\Theta = \begin{pmatrix} \hat\mu^{(1)} & \hat\sigma^{(1)} \\ \vdots & \vdots \\ \hat\mu^{(B)} & \hat\sigma^{(B)} \end{pmatrix} \in \mathbb{R}^{B\times 2}.
+\]
+Fit the generator by ordinary least squares:
+\[
+\hat A \;=\; \bigl(Z^\top Z + \epsilon I\bigr)^{-1} Z^\top \Theta \;\in\;\mathbb{R}^{(K+3)\times 2},
+\]
+where $\epsilon = 10^{-8}$ is a tiny ridge for numerical stability.
+
+\textbf{After this step, the generator is trained.}  For any new $(\alpha,\nu)$, the predicted parameters are
+\[
+g_{\hat\varphi}(\alpha,\nu) \;=\; \hat A^\top z(\alpha,\nu) \;=\; \bigl(\hat\mu_{\mathrm{pred}},\;\hat\sigma_{\mathrm{pred}}\bigr).
+\]
+
+\subsection{Step 4: Select $\hat\nu$ via validation criterion}
+
+For each candidate $\nu$ on the grid $\mathcal{G} = \{1.5, 2.0, \ldots, 15.0\}$:
+\begin{enumerate}
+\item Compute the generator's point estimate at unit weights:
+\[
+\bigl(\hat\mu(\nu),\;\hat\sigma(\nu)\bigr) \;=\; g_{\hat\varphi}(\mathbf{1}_{16},\;\nu) \;=\; \hat A^\top z(\mathbf{1}_{16},\nu).
+\]
+This is a single matrix--vector multiply --- no optimization.
+
+\item Evaluate the validation negative log-likelihood:
+\[
+\mathrm{NLL}_{\mathrm{val}}(\nu) \;=\; \sum_{i\in\mathcal{D}_{\mathrm{val}}} \ell\!\bigl(y_i \mid \hat\mu(\nu),\;\hat\sigma(\nu),\;\nu\bigr).
+\]
+\end{enumerate}
+Select
+\[
+\hat\nu \;=\; \arg\min_{\nu\in\mathcal{G}}\; \mathrm{NLL}_{\mathrm{val}}(\nu).
+\]
+
+\textbf{Key point:}  Evaluating the entire grid of 28 candidate $\nu$ values requires only 28 matrix--vector multiplies plus 28 likelihood evaluations on the validation set.  No inner optimization is performed at this stage.
+
+\subsection{Step 5: WBB uncertainty summaries}
+
+Fix $\hat\nu$ from Step~4.  For $m = 1,\ldots,M$ (we use $M=200$):
+\begin{enumerate}
+\item Draw fresh block weights: $\alpha^{(m)} \sim 16 \cdot \mathrm{Dirichlet}(\mathbf{1}_{16})$.
+\item Compute the generator output:
+\[
+\theta^{(m)} \;=\; g_{\hat\varphi}\!\bigl(\alpha^{(m)},\;\hat\nu\bigr) \;=\; \hat A^\top z\bigl(\alpha^{(m)},\;\hat\nu\bigr) \;=\; \bigl(\mu^{(m)},\;\sigma^{(m)}\bigr).
+\]
+Again, this is a single matrix--vector multiply --- no optimization.
+\end{enumerate}
+
+The empirical distribution of $\bigl\{(\mu^{(m)},\sigma^{(m)})\bigr\}_{m=1}^M$ approximates the WBB posterior of $(\mu,\sigma)$ at the selected $\hat\nu$.
+
+\textbf{Summary statistics:}
+\begin{align*}
+&\hat\mu_{\mathrm{WBB}} = \frac{1}{M}\sum_{m=1}^M \mu^{(m)}, \qquad \mathrm{sd}(\mu) = \sqrt{\frac{1}{M-1}\sum_{m=1}^M \bigl(\mu^{(m)}-\hat\mu_{\mathrm{WBB}}\bigr)^2},\\
+&\hat\sigma_{\mathrm{WBB}} = \frac{1}{M}\sum_{m=1}^M \sigma^{(m)}, \qquad \mathrm{sd}(\sigma) = \sqrt{\frac{1}{M-1}\sum_{m=1}^M \bigl(\sigma^{(m)}-\hat\sigma_{\mathrm{WBB}}\bigr)^2}.
+\end{align*}
+Credible intervals, histograms, or scatter plots of the $M$ draws can be used to visualize the posterior.
+
+%% ================================================================
+\section{Computational cost breakdown}
+%% ================================================================
+
+\begin{center}
+\begin{tabular}{llc}
+\hline
+Step & Operation & Number of optimizations \\
+\hline
+\textbf{Step 2} & Solve inner problem for each $(b)$ & $B = 200$ \\
+\textbf{Step 3} & OLS regression (one-time) & 0 \\
+\textbf{Step 4} & Generator forward pass per $\nu$ & 0 \\
+\textbf{Step 5} & Generator forward pass per $m$ & 0 \\
+\hline
+\textbf{Total} & & $B = 200$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Comparison with profile MLE:}  Profile MLE solves one optimization per grid point ($|\mathcal{G}| = 28$ solves).  The generator approach solves $B=200$ optimizations \emph{once} during training, but then evaluates the entire grid and produces uncertainty summaries via cheap forward passes.  The generator cost is front-loaded; the marginal cost of evaluating additional $\nu$ values or drawing additional bootstrap samples is negligible.
+
+%% ================================================================
+\section{Connection to the scale-mixture-of-normals representation}
+%% ================================================================
+
+The Student-$t$ distribution admits a representation as a scale mixture of normals:
+\[
+y_i \mid \tau_i \;\sim\; N\!\bigl(\mu,\;\sigma^2/\tau_i\bigr), \qquad \tau_i \;\sim\; \mathrm{Gamma}\!\bigl(\nu/2,\;\nu/2\bigr).
+\]
+Integrating out the latent precision $\tau_i$ recovers the $t_\nu(\mu,\sigma^2)$ marginal.  In this representation:
+\begin{itemize}
+\item The dependence on $\nu$ enters only through the mixing distribution $\mathrm{Gamma}(\nu/2,\nu/2)$.
+\item For fixed $(\tau_1,\ldots,\tau_n)$, the model is a heteroscedastic Gaussian regression with known weights --- a weighted least-squares problem.
+\item This connects to the envelope/auxiliary-variable framework: alternating between updating $(\mu,\sigma)$ given $\tau$ and updating $\tau$ given $(\mu,\sigma)$ yields an EM-type algorithm.
+\end{itemize}
+In the generator framework, we bypass this alternation entirely: the generator learns the direct map $(\omega,\nu) \mapsto (\hat\mu,\hat\sigma)$ without ever introducing auxiliary variables.
+
+%% ================================================================
+\section{Pseudocode}
+%% ================================================================
+
+\begin{algorithm}[H]
+\caption{Generative WBB for Student-$t$ degree-of-freedom selection}
+\begin{algorithmic}[1]
+\Require Training data $y_{\mathrm{train}} = (y_1,\ldots,y_{n_{\mathrm{train}}})$; validation data $y_{\mathrm{val}}$; grid $\mathcal{G}$; number of blocks $K$; training budget $B$; posterior draws $M$.
+\Statex
+\State \textbf{Block assignment:} Randomly assign each training observation to one of $K$ blocks.
+\Statex
+\State \textbf{Training loop:} For $b = 1,\ldots,B$:
+\State \hspace{1em} Draw $\alpha^{(b)} \sim K \cdot \mathrm{Dirichlet}(\mathbf{1}_K)$; expand to $\omega^{(b)} \in \mathbb{R}^{n_{\mathrm{train}}}$.
+\State \hspace{1em} Draw $\nu^{(b)} \sim \mathrm{Uniform}(\mathcal{G})$.
+\State \hspace{1em} Solve $\hat\theta^{(b)} = \arg\min_{(\mu,\sigma)} \frac{1}{n_{\mathrm{train}}}\sum_i \omega_i^{(b)}\,\ell(y_i\mid\mu,\sigma,\nu^{(b)})$.
+\State \hspace{1em} Store $\bigl(z(\alpha^{(b)},\nu^{(b)}),\;\hat\theta^{(b)}\bigr)$.
+\Statex
+\State \textbf{Fit generator:} $\hat A = (Z^\top Z + \epsilon I)^{-1} Z^\top \Theta$.
+\Statex
+\State \textbf{Tune $\nu$:} For each $\nu \in \mathcal{G}$:
+\State \hspace{1em} $(\hat\mu,\hat\sigma) = \hat A^\top z(\mathbf{1}_K,\nu)$.
+\State \hspace{1em} $\mathrm{NLL}_{\mathrm{val}}(\nu) = \sum_{i\in\mathcal{D}_{\mathrm{val}}} \ell(y_i\mid\hat\mu,\hat\sigma,\nu)$.
+\State $\hat\nu = \arg\min_\nu \mathrm{NLL}_{\mathrm{val}}(\nu)$.
+\Statex
+\State \textbf{Uncertainty:} For $m = 1,\ldots,M$:
+\State \hspace{1em} Draw $\alpha^{(m)} \sim K \cdot \mathrm{Dirichlet}(\mathbf{1}_K)$.
+\State \hspace{1em} $\theta^{(m)} = \hat A^\top z(\alpha^{(m)},\hat\nu)$.
+\State Report $\bigl\{\theta^{(m)}\bigr\}_{m=1}^M$ as approximate WBB posterior draws of $(\mu,\sigma)$.
+\end{algorithmic}
+\end{algorithm}
+
+%% ================================================================
+\section{Results with concrete numbers}
+%% ================================================================
+
+Using $n_{\mathrm{total}} = 500$ ($n_{\mathrm{train}} = 350$, $n_{\mathrm{val}} = 150$), $K=16$ blocks, $B=200$ training pairs, and $M=200$ posterior draws, over 20 independent replications:
+
+\begin{center}
+\begin{tabular}{lccc}
+\hline
+Method & Selected $\nu$ & $\hat\mu$ & $\hat\sigma$ \\
+\hline
+Profile MLE & $5.3 \pm 2.9$ & $2.02 \pm 0.10$ & $1.50 \pm 0.11$ \\
+Generator (amortized) & $5.2 \pm 2.4$ & $2.02 \pm 0.10$ & $1.48 \pm 0.12$ \\
+WBB posterior mean ($\pm$ avg sd) & --- & $2.02$ ($\pm$ 0.089) & $1.49$ ($\pm$ 0.075) \\
+\hline
+\multicolumn{4}{l}{True values: $\nu = 4$, $\mu = 2.000$, $\sigma = 1.500$.}\\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Key observations:}
+\begin{itemize}
+\item The generator matches the profile MLE for $\hat\mu$ and $\hat\sigma$ to within sampling noise.
+\item Both methods are upward-biased for $\nu$ (mean $\approx 5.3$ vs true $\nu=4$), reflecting the asymmetric profile likelihood: steep for small $\nu$, flat as $\nu\to\infty$.
+\item The WBB posterior standard deviations (0.089 for $\mu$, 0.075 for $\sigma$) are close to the cross-replicate standard deviations (0.10 and 0.12), suggesting reasonable uncertainty calibration.
+\item After the one-time generator training ($B=200$ inner solves), evaluating 28 grid points and drawing 200 posterior samples requires only matrix--vector multiplies.
+\end{itemize}
+
+%% ================================================================
+\section{Summary}
+%% ================================================================
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{The method in one sentence:}  Train a cheap map from (bootstrap weights, hyper-parameter) to fitted parameters using a batch of solved examples, then use it to (1)~sweep over hyper-parameter values without re-solving, and (2)~produce uncertainty estimates by resampling the bootstrap weights.
+}}
+\end{center}
+
+\end{document}

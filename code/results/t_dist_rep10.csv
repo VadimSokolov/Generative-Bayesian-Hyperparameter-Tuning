@@ -1,0 +1,2 @@
+"rep","nu_true","mu_true","sigma_true","nu_mle","mu_mle","sigma_mle","nu_gen","mu_gen","sigma_gen","wbb_mu_mean","wbb_mu_sd","wbb_sigma_mean","wbb_sigma_sd","time_mle","time_gen_train"
+10,4,2,1.5,6.5,1.99506999850033,1.50839512386094,7,1.99780574805616,1.51885145126202,1.99989133366651,0.0882992817938486,1.51417896146262,0.0782890052936525,0.14,0.689

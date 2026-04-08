@@ -1,0 +1,33 @@
+
+\documentclass[12pt]{letter}
+\usepackage[margin=1in]{geometry}
+\usepackage[slantedGreek]{mathpazo}
+\usepackage{hyperref}
+
+\signature{Hedibert Lopes, Nick Polson, and Vadim Sokolov}
+\address{Vadim Sokolov\\Department of Systems Engineering and Operations Research\\George Mason University\\vsokolov@gmu.edu}
+
+\begin{document}
+
+\begin{letter}{Professor Yuguo Chen\\Co-Editor\\Journal of Computational and Graphical Statistics}
+
+\opening{Dear Professor Chen,}
+
+We are pleased to submit our manuscript ``Generative Bayesian Hyperparameter Tuning'' for consideration as a regular article in the \textit{Journal of Computational and Graphical Statistics}.
+
+The paper develops a computational framework for hyperparameter tuning that combines the weighted Bayesian bootstrap (WBB) with a learned transport map (generator) to amortize repeated optimization. The generator learns the mapping from hyperparameters and bootstrap weights to fitted model parameters, so that evaluating the fit at new hyperparameter values requires only a forward pass rather than retraining from scratch. The same generator simultaneously provides posterior uncertainty summaries by resampling the bootstrap weights.
+
+We unify this approach with two methods that have appeared in JCGS: generalized cross-validation (GCV) for linear smoothers, and the Generative Multi-purpose Sampler (GMS) of Shin, Wang, and Liu (2024, \textit{JCGS}). In our framework, GCV is the deterministic special case where the optimizer, criterion, and transport map are all analytic, while GMS is the special case where the generator is trained by criterion minimization. The paper extends this template to modern models trained by stochastic gradient descent.
+
+We demonstrate the method on three problems: ridge regression (benchmarked against GCV and cross-validation), Student-$t$ degree-of-freedom estimation (a classical problem where the profile likelihood is flat and MCMC is expensive), and MNIST classification (where a neural-network generator amortizes tuning of the regularization parameter). All experiments are supported by 20-replicate studies with reproducible code available at \url{https://github.com/VadimSokolov/Generative-Bayesian-Hyperparameter-Tuning}.
+
+We believe the paper is well suited to JCGS because it addresses a core computational problem in statistics --- hyperparameter selection --- with a method that is practical, reproducible, and grounded in Bayesian bootstrap theory.
+
+\textbf{Conflict of interest disclosure:} One of the authors (Hedibert Lopes) currently serves as an Associate Editor of JCGS. We request that the manuscript be handled by a different editor to avoid any conflict.
+
+Thank you for considering our submission.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}

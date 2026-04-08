@@ -1,0 +1,17 @@
+\begin{table}[H]
+\centering
+\caption{Toy weighted-ridge example: integrated prediction loss (IPL) for a linear generator trained either by supervised matching to optimizer labels ($B$ optimizer solves) or by criterion-based (GMS-style) training ($M$ Monte Carlo draws). Values are means over 12 replications with Monte Carlo standard errors in parentheses.}
+\label{tab:toy-gms-ipl}
+\begin{tabular}{lccc}
+\hline
+ & \multicolumn{3}{c}{Training budget}\\
+Method & $B{=}50$ & $B{=}200$ & $B{=}800$\\
+\hline
+Supervised match-to-optimizer & 0.067 (0.003) & 0.033 (0.001) & 0.029 (0.001) \\
+\hline
+ & $M{=}500$ & $M{=}2{,}000$ & $M{=}10{,}000$\\
+\hline
+Criterion-based (GMS-style) & 0.033 (0.000) & 0.032 (0.000) & 0.031 (0.000) \\
+\hline
+\end{tabular}
+\end{table}

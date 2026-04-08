@@ -1,0 +1,14 @@
+\begin{table}[H]
+\centering
+\caption{Ridge tuning illustration (simulated data). We compare generalized cross-validation (GCV), $K$-fold cross-validation (CV), and a simple amortized generator proxy that approximates the CV curve without repeated refits across $\lambda$. Test MSE is computed on an independent hold-out test set.}
+\label{tab:ridge-tuning}
+\begin{tabular}{lcc}
+\hline
+Method & Selected $\lambda$ & Test MSE\\
+\hline
+GCV & 0.041 & 1.463 \\
+5-fold CV & 0.047 & 1.450 \\
+Amortized CV proxy (refit at selected $\lambda$) & 0.027 & 1.500 \\
+\hline
+\end{tabular}
+\end{table}

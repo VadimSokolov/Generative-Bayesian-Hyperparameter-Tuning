@@ -1,0 +1,14 @@
+\begin{table}[H]
+\centering
+\caption{Student-$t$ tuning results over 20 replications ($n_{\mathrm{train}}=350$, $n_{\mathrm{val}}=150$). True parameters: $\nu=4$, $\mu=2.000$, $\sigma=1.500$. Values are means $\pm$ standard deviations across replications.}
+\label{tab:t-dist-tuning}
+\begin{tabular}{lccc}
+\hline
+Method & Selected $\nu$ & $\hat{\mu}$ & $\hat{\sigma}$ \\
+\hline
+Profile MLE & $5.3 \pm 2.9$ & $2.02 \pm 0.10$ & $1.50 \pm 0.11$ \\
+Generator (amortized) & $5.2 \pm 2.4$ & $2.02 \pm 0.10$ & $1.48 \pm 0.12$ \\
+WBB posterior mean ($\pm$ avg sd) & --- & $2.02$ ($\pm$ $0.089$) & $1.49$ ($\pm$ $0.075$) \\
+\hline
+\end{tabular}
+\end{table}

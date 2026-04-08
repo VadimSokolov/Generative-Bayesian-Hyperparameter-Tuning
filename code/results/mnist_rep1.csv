@@ -1,0 +1,2 @@
+rep,best_lambda,best_val_acc,test_acc_gen,baseline_acc,wbb_mean,wbb_std,train_time,eval_time,baseline_time
+1,4.281332398719396e-05,0.9531,0.9592,0.9684,0.958738,0.0013451973832861828,97.76907873153687,27.590843439102173,36.61461019515991
